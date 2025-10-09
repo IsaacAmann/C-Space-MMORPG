@@ -7,5 +7,9 @@ add_executable(C-Space-MMORPG-Server
 
 )
 
+add_subdirectory(PlayerConnectionManager)
+
+
 target_include_directories(C-Space-MMORPG-Server PUBLIC ../include)
+target_link_libraries(C-Space-MMORPG-Server PRIVATE PlayerConnectionManager)
 
