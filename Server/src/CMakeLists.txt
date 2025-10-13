@@ -11,10 +11,11 @@ add_executable(C-Space-MMORPG-Server
 
 
 add_subdirectory(PlayerConnectionManager)
+add_subdirectory(DatabaseService)
 
 
-target_include_directories(C-Space-MMORPG-Server PUBLIC ../include /usr/include/mysql /usr/include/mysql/mysql )
 target_link_libraries(C-Space-MMORPG-Server PRIVATE PlayerConnectionManager)
+target_link_libraries(C-Space-MMORPG-Server PRIVATE DatabaseService)
 
 target_link_libraries(C-Space-MMORPG-Server PRIVATE -lmariadb)
 
