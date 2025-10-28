@@ -4,18 +4,20 @@
 #include <box2d/box2d.h>
 #include <box2d/collision.h>
 #include <box2d/math_functions.h>
+#include <stdint.h>
 
 typedef struct BaseEntity
 {
-	int entityType;
-	b2Vec2 position;
-	b2Vec2 rotation;
+	uint32_t entityType;
+	//Set by collision handler, should not be set manually
+	int entityId;
+	b2Transform transform;
 } BaseEntity;
 
 typedef struct DynamicEntity
 {
 	BaseEntity baseEntity;
-	b2Vec velocity;
+	b2Vec2 velocity;
 } DynamicEntity;
 
 typedef struct DestructibleEntity

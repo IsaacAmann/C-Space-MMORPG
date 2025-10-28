@@ -8,10 +8,12 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <pthread.h>
+#include "entities.h"
+#include "CollisionHandler.h"
 
 typedef struct Sector
 {
-	b2DynamicTree dynamicTree;
+	CollisionHandler collisionHandler;
 	pthread_t simulationLoopThread;
 	int isRunning;
 	
@@ -27,7 +29,7 @@ void deleteSector(Sector* sector);
 void addEntity(BaseEntity* entity);
 
 //Contains statements that should be run each step of the simulation
-void* playerConnectionThreadRun(void *args)
+void* playerConnectionThreadRun(void *args);
 
 
 

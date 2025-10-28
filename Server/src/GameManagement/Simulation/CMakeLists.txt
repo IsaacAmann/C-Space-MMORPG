@@ -2,6 +2,7 @@
 add_library(
 	Simulation
 	SectorSimulation.c
+	CollisionHandler.c
 )
 
 #linking glib
