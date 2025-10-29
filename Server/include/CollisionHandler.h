@@ -6,25 +6,23 @@
 #include <box2d/math_functions.h>
 #include "entities.h"
 #include <stdint.h>
+#include <glib.h>
+
 
 typedef struct CollisionHandler
 {
 	b2DynamicTree dynamicTree;
 	uint32_t currentID;
+	//will probably just be set to the sector's entity list, no reason for there to be separate arrays at the moment
+	GArray* entities;
 
 } CollisionHandler;
 
-CollisionHandler* createCollisionHandler();
+CollisionHandler* createCollisionHandler(GArray* entities);
 
 void freeCollisionHandler(CollisionHandler* collisionHandler);
 
-//Need way to identify entity for removal (entity ID or return index?)
-//Should probably go with ID, less likely to repeat ids
-int addCollisionEntity(CollisionHandler* collisionHandler, BaseEntity* entity);
 
-int removeEntityById(CollisionHandler* collisionHandler, int entityId);
-
-BaseEntity* getEntityById(CollisionHandler* collisionHandler, int entityId);
 
 
 

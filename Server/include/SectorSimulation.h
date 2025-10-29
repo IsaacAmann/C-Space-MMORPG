@@ -15,6 +15,7 @@ typedef struct Sector
 {
 	CollisionHandler collisionHandler;
 	pthread_t simulationLoopThread;
+	GArray* entities;
 	int isRunning;
 	
 } Sector;
@@ -28,8 +29,15 @@ void deleteSector(Sector* sector);
 //Add entity to the simulation. Can be any descendent of BaseEntity
 void addEntity(BaseEntity* entity);
 
+int removeEntityById(int entityId);
+
+BaseEntity* getEntityById(int entityId);
+
+
+
 //Contains statements that should be run each step of the simulation
 void* playerConnectionThreadRun(void *args);
+
 
 
 

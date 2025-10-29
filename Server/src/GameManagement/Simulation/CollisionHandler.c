@@ -1,10 +1,11 @@
 #include "CollisionHandler.h"
 #include <stdlib.h>
 
-CollisionHandler* createCollisionHandler()
+CollisionHandler* createCollisionHandler(GArray* entities)
 {
 	CollisionHandler* collisionHandler = (CollisionHandler*) malloc(sizeof(CollisionHandler));
 	
+	collisionHandler->entities = entities;
 	collisionHandler->currentID = 0;
 	
 	collisionHandler->dynamicTree = b2DynamicTree_Create();
@@ -21,17 +22,3 @@ void freeCollisionHandler(CollisionHandler* collisionHandler)
 }
 
 
-int addCollisionEntity(CollisionHandler* collisionHandler, BaseEntity* entity)
-{
-	
-}
-
-int removeEntityById(CollisionHandler* collisionHandler, int entityId)
-{
-	
-}
-
-BaseEntity* getEntityById(CollisionHandler* collisionHandler, int entityId)
-{
-	
-}
