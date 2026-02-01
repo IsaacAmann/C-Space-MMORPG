@@ -7,7 +7,7 @@ add_executable(C-Space-MMORPG-Server
 
 )
 
-
+set (CMAKE_BUILD_TYPE Debug)
 
 
 add_subdirectory(PlayerConnectionManager)

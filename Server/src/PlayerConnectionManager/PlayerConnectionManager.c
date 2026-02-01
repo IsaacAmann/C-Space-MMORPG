@@ -1,13 +1,25 @@
 
 #include "main.h"
 #include "PlayerConnectionManager.h"
+#include <glib.h>
+#include "Client.h"
+#include "string.h"
 
 
 struct sockaddr_in playerConnectionAddress;
 
+pthread_mutex_t clientListLock;
+GArray* clientList;
+
 //Thread function to listen for new player connections
+//TCP connection for menus, chat, slow things
+//Clients will connect to sector on separate UDP connection
 void* playerConnectionManagerThreadRun(void *args)
 {
+	pthread_mutex_init(&clientListLock, NULL);
+	clientList = g_array_new(FALSE, FALSE, sizeof(Client*));
+	
+	int currentConnectionID = 0;
 	//Setup socket for incoming player connections
 	int playerConnectionSocket = socket(AF_INET, SOCK_STREAM, 0);
 	
@@ -30,12 +42,46 @@ void* playerConnectionManagerThreadRun(void *args)
 		
 		char* currentClientIP = inet_ntoa(clientAddress.sin_addr);
 		printf("New client connection @ %s\n", currentClientIP); 
+		
+		//Create new client struct
+		Client* currentClient = malloc(sizeof(Client));
+		
+		//Create new thread to handle client
+		currentClient->clientThread = malloc(sizeof(pthread_t));
+		currentClient->connectionID = currentConnectionID++;
+		
+		strcpy(currentClient->ipAddress, inet_ntoa(clientAddress.sin_addr));
+		currentClient->socket = playerSocket;
+		
+		pthread_create(currentClient->clientThread, NULL, &playerConnectionThreadRun, (void*)currentClient);
+		
+		//add to client array
+		pthread_mutex_lock(&clientListLock);
+		g_array_append_vals(clientList, &currentClient, 1);
+		pthread_mutex_unlock(&clientListLock);
+
 	}
 	
 	printf("Player connection listener is exitting,,,\n");
 }
 
+
+
 void* playerConnectionThreadRun(void *args)
 {
+	Client* client = (Client*)args;
+	char buffer;
+	
+	int recvOutput = recv(client->socket, &buffer, 1, 0);
+	while(recvOutput != 0 && recvOutput != -1)
+	{
+		printf("%s sent %c\n", client->ipAddress, buffer);
+		recvOutput = recv(client->socket, &buffer, 1, 0);
+	}
+	
+	printf("%s connection closed with recv code %d\n", client->ipAddress, recvOutput);
+	
+	//free client struct
+	//doing this frees the pointer to this thread, hopefully that is not bad
 	
 }

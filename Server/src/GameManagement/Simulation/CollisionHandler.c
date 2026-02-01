@@ -17,7 +17,6 @@ void freeCollisionHandler(CollisionHandler* collisionHandler)
 {
 	b2DynamicTree_Destroy(&(collisionHandler->dynamicTree));
 	
-	
 	free(collisionHandler);
 }
 

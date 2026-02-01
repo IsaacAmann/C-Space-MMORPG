@@ -4,6 +4,7 @@
 #define PLAYER_CONNECTION_PORT 30200
 #define SERVER_NODE_CONNECTION_PORT 30201
 
+
 #include <unistd.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -12,6 +13,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <pthread.h>
+
 
 typedef struct PlayerConnection
 {
