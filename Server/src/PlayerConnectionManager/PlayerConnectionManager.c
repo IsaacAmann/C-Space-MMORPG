@@ -9,7 +9,7 @@
 struct sockaddr_in playerConnectionAddress;
 
 pthread_mutex_t clientListLock;
-GArray* clientList;
+GPtrArray* clientList;
 
 //Thread function to listen for new player connections
 //TCP connection for menus, chat, slow things
@@ -17,7 +17,7 @@ GArray* clientList;
 void* playerConnectionManagerThreadRun(void *args)
 {
 	pthread_mutex_init(&clientListLock, NULL);
-	clientList = g_array_new(FALSE, FALSE, sizeof(Client*));
+	clientList = g_ptr_array_new();
 	
 	int currentConnectionID = 0;
 	//Setup socket for incoming player connections
@@ -52,20 +52,18 @@ void* playerConnectionManagerThreadRun(void *args)
 		
 		strcpy(currentClient->ipAddress, inet_ntoa(clientAddress.sin_addr));
 		currentClient->socket = playerSocket;
-		
 		pthread_create(currentClient->clientThread, NULL, &playerConnectionThreadRun, (void*)currentClient);
-		
+
 		//add to client array
 		pthread_mutex_lock(&clientListLock);
-		g_array_append_vals(clientList, &currentClient, 1);
+		g_ptr_array_add(clientList, currentClient);
+
 		pthread_mutex_unlock(&clientListLock);
 
 	}
 	
 	printf("Player connection listener is exitting,,,\n");
 }
-
-
 
 void* playerConnectionThreadRun(void *args)
 {
@@ -81,7 +79,60 @@ void* playerConnectionThreadRun(void *args)
 	
 	printf("%s connection closed with recv code %d\n", client->ipAddress, recvOutput);
 	
+	//Remove client from client list
+	clientListRemoveByConnectionID(client->connectionID);
+	
 	//free client struct
 	//doing this frees the pointer to this thread, hopefully that is not bad
+	freeClient(client);
 	
+}
+
+bool clientListRemoveByConnectionID(int connectionID)
+{
+	bool output = FALSE;
+	
+	pthread_mutex_lock(&clientListLock);
+	int index =  clientListGetIndexByConnectionID(connectionID);
+	if(index != -1)
+	{
+		output = TRUE;
+		g_ptr_array_remove_index(clientList, index);
+		printf("Removing %d\n", connectionID);
+	}
+	pthread_mutex_unlock(&clientListLock);
+	
+	return output;
+}
+
+Client* clientListGetByConnectionID(int connectionID)
+{
+	Client* output = NULL;
+	
+	pthread_mutex_lock(&clientListLock);
+	int index = clientListGetIndexByConnectionID(connectionID);
+	if(index != -1)
+	{
+		output = g_ptr_array_index(clientList, index);
+	}
+	pthread_mutex_unlock(&clientListLock);
+	
+	return output;
+}
+
+//Should only be used by other functions that have already grabbed lock
+int clientListGetIndexByConnectionID(int connectionID)
+{
+	int output;
+	
+	//Have to create a blank struct to compare against
+	Client compareClient;
+	compareClient.connectionID = connectionID;
+	
+	bool found = g_ptr_array_find_with_equal_func(clientList, &compareClient, clientListEqualFunction, &output);
+	
+	if(found == FALSE)
+		output = -1;
+	
+	return output;
 }

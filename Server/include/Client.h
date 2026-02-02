@@ -18,4 +18,8 @@ typedef struct Client
 	pthread_t* clientThread;
 } Client;
 
+
+void freeClient(Client* client);
+
+int clientListEqualFunction(const void * a, const void * b);
 #endif

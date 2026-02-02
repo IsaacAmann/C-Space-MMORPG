@@ -13,6 +13,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <pthread.h>
+#include "Client.h"
 
 
 typedef struct PlayerConnection
@@ -29,4 +30,9 @@ void* playerConnectionManagerThreadRun(void* args);
 
 void* playerConnectionThreadRun(void* args);
 
+bool clientListRemoveByConnectionID(int connectionID);
+
+Client* clientListGetByConnectionID(int connectionID);
+
+int clientListGetIndexByConnectionID(int connectionID);
 #endif
