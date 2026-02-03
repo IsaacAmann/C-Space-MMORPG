@@ -11,6 +11,6 @@ typedef struct TCPBinaryMessage
 	char* data;
 } TCPBinaryMessage;
 
-
+#define TCP_LOGIN 0x0000
 
 #endif
