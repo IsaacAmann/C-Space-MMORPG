@@ -4,7 +4,7 @@
 #include <glib.h>
 #include "Client.h"
 #include "string.h"
-
+#include "TCPBinaryProtocol.h"
 
 struct sockaddr_in playerConnectionAddress;
 
