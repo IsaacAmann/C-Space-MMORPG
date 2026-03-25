@@ -12,5 +12,7 @@ typedef struct TCPBinaryMessage
 } TCPBinaryMessage;
 
 #define TCP_LOGIN 0x0000
+#define TCP_LOGOUT 0x0001
+#define TCP_REGISTER 0x0002
 
 #endif

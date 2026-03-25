@@ -12,4 +12,4 @@ target_link_libraries(GameManagement PRIVATE -lm)
 
 
 
-target_include_directories(DatabaseService PUBLIC ../../include)
+target_include_directories(GameManagement PUBLIC ../../include)
