@@ -1,0 +1,5 @@
+#ifndef PLAYER_AUTHENTICATION_H
+#define PLAYER_AUTHENTICATION_H
+
+
+#endif

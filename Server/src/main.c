@@ -1,6 +1,6 @@
 
 #include "main.h"
-#include "PlayerConnectionManager.h"
+#include "ClientConnectionManager.h"
 #include "DatabaseManager.h"
 
 int isServerRunning;
@@ -13,8 +13,8 @@ int main()
 	//Initialize sectors
 	
 	//Initialize player connection manager
-	pthread_t playerConnectionManagerThread;
-	pthread_create(&playerConnectionManagerThread, NULL, &playerConnectionManagerThreadRun, NULL);
+	pthread_t clientConnectionManagerThread;
+	pthread_create(&clientConnectionManagerThread, NULL, &clientConnectionManagerThreadRun, NULL);
 	
 	//Initialize server connection manager
 	
@@ -24,7 +24,7 @@ int main()
 	
 	
 	//Hold for threads to exit
-	pthread_join(playerConnectionManagerThread, NULL);
+	pthread_join(clientConnectionManagerThread, NULL);
 	
 	
 	//Shutdown server

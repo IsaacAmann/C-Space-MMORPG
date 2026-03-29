@@ -26,9 +26,9 @@ typedef struct PlayerConnection
 	
 } PlayerConnection;
 
-void* playerConnectionManagerThreadRun(void* args);
+void* clientConnectionManagerThreadRun(void* args);
 
-void* playerConnectionThreadRun(void* args);
+void* clientConnectionThreadRun(void* args);
 
 bool clientListRemoveByConnectionID(int connectionID);
 

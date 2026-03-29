@@ -10,11 +10,15 @@
 #include <arpa/inet.h>
 #include <pthread.h>
 
+#define CLIENT_TYPE_PLAYER 0
+#define CLIENT_TYPE_SECTOR_SERVER 1
+
 typedef struct Client
 {
 	char ipAddress[23];
 	int connectionID;
 	int socket;
+	int clientType;
 	pthread_t* clientThread;
 } Client;
 

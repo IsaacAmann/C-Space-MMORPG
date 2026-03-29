@@ -10,13 +10,14 @@ add_executable(C-Space-MMORPG-Server
 set (CMAKE_BUILD_TYPE Debug)
 
 
-add_subdirectory(PlayerConnectionManager)
+add_subdirectory(ClientConnectionManager)
 add_subdirectory(DatabaseService)
+add_subdirectory(AuthenticationService)
 
 
-
-target_link_libraries(C-Space-MMORPG-Server PRIVATE PlayerConnectionManager)
+target_link_libraries(C-Space-MMORPG-Server PRIVATE ClientConnectionManager)
 target_link_libraries(C-Space-MMORPG-Server PRIVATE DatabaseService)
+target_link_libraries(C-Space-MMORPG-Server PRIVATE AuthenticationService)
 
 target_link_libraries(C-Space-MMORPG-Server PRIVATE -lmariadb)
 

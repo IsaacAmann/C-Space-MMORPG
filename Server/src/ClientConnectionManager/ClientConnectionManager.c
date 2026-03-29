@@ -1,16 +1,28 @@
 
 #include "main.h"
-#include "PlayerConnectionManager.h"
+#include "ClientConnectionManager.h"
 #include <glib.h>
 #include "Client.h"
 #include "string.h"
 #include "TCPBinaryProtocol.h"
 
-struct sockaddr_in playerConnectionAddress;
+struct sockaddr_in clientConnectionAddress;
 
 pthread_mutex_t clientListLock;
 GPtrArray* clientList;
 
+
+void* clientConnectionManagerThreadRun(void *args)
+{
+	
+}
+
+void* clientConnectionThreadRun(void *args)
+{
+	
+}
+
+/*
 //Thread function to listen for new player connections
 //TCP connection for menus, chat, slow things
 //Clients will connect to sector on separate UDP connection
@@ -87,6 +99,8 @@ void* playerConnectionThreadRun(void *args)
 	freeClient(client);
 	
 }
+
+*/
 
 bool clientListRemoveByConnectionID(int connectionID)
 {
