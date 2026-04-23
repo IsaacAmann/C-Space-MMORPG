@@ -3,10 +3,12 @@
 #include "ClientConnectionManager.h"
 #include "DatabaseManager.h"
 
-int isServerRunning;
+int serverRunning;
 
 int main()
 {
+	serverRunning = 1;
+
 	//Initialize database
 	initializeDatabase();
 	
@@ -18,10 +20,6 @@ int main()
 	
 	//Initialize server connection manager
 	
-	//Global variable. Other threads should monitor this for signal to shutdown
-	isServerRunning = 1;
-	
-	
 	
 	//Hold for threads to exit
 	pthread_join(clientConnectionManagerThread, NULL);
@@ -31,3 +29,9 @@ int main()
 	
 	return 0;
 }
+
+int isServerRunning()
+{
+	return serverRunning;
+}
+
