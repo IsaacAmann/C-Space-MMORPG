@@ -22,11 +22,12 @@ void* clientConnectionManagerThreadRun(void *args)
 	SSL_CTX* sslCtx = SSL_CTX_new(TLS_server_method());
 	
 	//Creating self signed certificate for testing, this should be replaced later with a proper certificate
-	
 	//Create private key
-	EVP_PKEY* privateKey = EVP_PKEY_new();
-	privateKey = EVP_RSA_gen(128);
-	
+	EVP_PKEY* privateKey;
+	EVP_PKEY_CTX* privateKeyCtx = EVP_PKEY_CTX_new_id(EVP_PKEY_RSA, NULL);
+	EVP_PKEY_keygen_init(privateKeyCtx);
+	EVP_PKEY_CTX_set_rsa_keygen_bits(privateKeyCtx, 2048);
+	EVP_PKEY_keygen(privateKeyCtx, &privateKey); 
 	
 	X509* certificate = X509_new();
 	
@@ -35,44 +36,33 @@ void* clientConnectionManagerThreadRun(void *args)
 	ASN1_TIME_set_string_X509(before, "2601010101011");
 	ASN1_TIME_set_string_X509(after, "9901010101011");
 	
-	X509_set1_notBefore(certificate, before);
-	X509_set1_notAfter(certificate, after);
+    X509_gmtime_adj(X509_getm_notBefore(certificate), 0);
+    X509_gmtime_adj(X509_getm_notAfter(certificate), 31536000L);
+	
+	
+	X509_NAME* name = X509_get_subject_name(certificate);
+	X509_NAME_add_entry_by_txt(name, "C", MBSTRING_ASC, (unsigned char*)"US", -1, -1, 0);
+    X509_NAME_add_entry_by_txt(name, "O", MBSTRING_ASC, (unsigned char*)"None", -1, -1, 0);
+    X509_NAME_add_entry_by_txt(name, "CN", MBSTRING_ASC, (unsigned char*)"localhost", -1, -1, 0);
+    	
+	X509_set_issuer_name(certificate, name);
 	
 	X509_set_pubkey(certificate, privateKey);
+	X509_sign(certificate, privateKey, EVP_sha256());
 	
+
+	
+	SSL_CTX_set_security_level(sslCtx, 0);
+	SSL_CTX_set_session_cache_mode(sslCtx, SSL_SESS_CACHE_OFF);
 	SSL_CTX_use_certificate(sslCtx, certificate);
 	SSL_CTX_use_PrivateKey(sslCtx, privateKey);
 	
 	
 	SSL_CTX_set_verify(sslCtx, SSL_VERIFY_NONE, NULL);
 	
-	//Maybe come back and set this up later (sounds like something I should have)
-	SSL_CTX_set_session_cache_mode(sslCtx, SSL_SESS_CACHE_OFF);
-	
-	//Not sure if I need that
-	//SSL_CTX_set_alpn_select_cb(ctx, select_alpn, NULL);
-	
-	/*
-	//Create socket
-	int socketFileDesc = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-	printf("fd: %d\n", socketFileDesc);
-	
-	struct sockaddr_in socketAddress;
-	socketAddress.sin_family = AF_INET;
-	socketAddress.sin_port = htons(8080);
-	
-	*/
-	//socketAddress.sin_addr.s_addr = INADDR_ANY;
-
-	//Bind socket
-	//printf("Bind output:%d\n",bind(socketFileDesc, (const struct sockaddr*)&socketAddress, sizeof(socketAddress)));
-	
-	//Create listener 
-	//SSL* listener = SSL_new_listener(sslCtx, 0);
-	//SSL_set_fd(listener, socketFileDesc);
-	//printf("listen out %d\n",SSL_listen(listener));
 
 	BIO* accepterBio = BIO_new_accept("8080");
+	BIO_do_accept(accepterBio);
 	BIO_set_bind_mode(accepterBio, BIO_BIND_REUSEADDR);
 	
 	long opts;
@@ -104,6 +94,7 @@ void* clientConnectionManagerThreadRun(void *args)
 		//ssl handshake
 		if(SSL_accept(ssl) <= 0)
 		{
+			printf("handshake\n");
 			ERR_print_errors_fp(stderr);
 			SSL_free(ssl);
 			continue;
