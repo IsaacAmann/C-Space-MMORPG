@@ -7,6 +7,7 @@
 #include "TCPBinaryProtocol.h"
 #include <openssl/ssl.h>
 #include <openssl/err.h>
+#include <uuid/uuid.h>
 
 struct sockaddr_in clientConnectionAddress;
 
@@ -99,121 +100,88 @@ void* clientConnectionManagerThreadRun(void *args)
 			SSL_free(ssl);
 			continue;
 		}
+		//Pass off to another thread
 		
+		//Create new client struct
+		Client* currentClient = malloc(sizeof(Client));
+		initClient(currentClient);
+		currentClient->ssl = ssl;
+		currentClient->readThread = malloc(sizeof(pthread_t));
+		currentClient->writeThread = malloc(sizeof(pthread_t));
+
+		pthread_create(currentClient->readThread, NULL, &clientReadThreadRun, (void*)currentClient);
+		pthread_create(currentClient->writeThread, NULL, &clientWriteThreadRun, (void*)currentClient);
+		//add to client array
+		pthread_mutex_lock(&clientListLock);
+		g_ptr_array_add(clientList, currentClient);
+		pthread_mutex_unlock(&clientListLock);
 		
 	}
 	
 	printf("Client connection listener is exitting,,,\n");
 }
 
-void* clientConnectionThreadRun(void *args)
-{
-	
-}
-
-/*
-//Thread function to listen for new player connections
-//TCP connection for menus, chat, slow things
-//Clients will connect to sector on separate UDP connection
-void* playerConnectionManagerThreadRun(void *args)
-{
-	pthread_mutex_init(&clientListLock, NULL);
-	clientList = g_ptr_array_new();
-	
-	int currentConnectionID = 0;
-	//Setup socket for incoming player connections
-	int playerConnectionSocket = socket(AF_INET, SOCK_STREAM, 0);
-	
-	playerConnectionAddress.sin_family = AF_INET;
-	playerConnectionAddress.sin_port = htons(PLAYER_CONNECTION_PORT);
-	playerConnectionAddress.sin_addr.s_addr = INADDR_ANY;
-	
-	bind(playerConnectionSocket, (struct sockaddr *) &playerConnectionAddress, sizeof(playerConnectionAddress));
-	
-	listen(playerConnectionSocket, 50);
-	
-	
-	printf("Player connection listener accepting connections...\n");
-	while(isServerRunning)
-	{
-		socklen_t sockLen = sizeof(playerConnectionAddress);
-
-		struct sockaddr_in clientAddress;
-		int playerSocket = accept(playerConnectionSocket, (struct sockaddr *) &clientAddress, &sockLen);
-		
-		char* currentClientIP = inet_ntoa(clientAddress.sin_addr);
-		printf("New client connection @ %s\n", currentClientIP); 
-		
-		//Create new client struct
-		Client* currentClient = malloc(sizeof(Client));
-		
-		//Create new thread to handle client
-		currentClient->clientThread = malloc(sizeof(pthread_t));
-		currentClient->connectionID = currentConnectionID++;
-		
-		strcpy(currentClient->ipAddress, inet_ntoa(clientAddress.sin_addr));
-		currentClient->socket = playerSocket;
-		pthread_create(currentClient->clientThread, NULL, &playerConnectionThreadRun, (void*)currentClient);
-
-		//add to client array
-		pthread_mutex_lock(&clientListLock);
-		g_ptr_array_add(clientList, currentClient);
-
-		pthread_mutex_unlock(&clientListLock);
-
-	}
-	
-	printf("Player connection listener is exitting,,,\n");
-}
-
-void* playerConnectionThreadRun(void *args)
+void* clientReadThreadRun(void *args)
 {
 	Client* client = (Client*)args;
-	char buffer;
+	unsigned char buffer[10];
+	size_t bytesRead;
 	
-	int recvOutput = recv(client->socket, &buffer, 1, 0);
-	while(recvOutput != 0 && recvOutput != -1)
+	while(SSL_read_ex(client->ssl, buffer, sizeof(buffer), &bytesRead) > 0)
 	{
-		printf("%s sent %c\n", client->ipAddress, buffer);
-		recvOutput = recv(client->socket, &buffer, 1, 0);
+		printf("read: %s, total bytes: %d\n", buffer, bytesRead);
 	}
 	
-	printf("%s connection closed with recv code %d\n", client->ipAddress, recvOutput);
+	printf("connection closed\n");
 	
 	//Remove client from client list
-	clientListRemoveByConnectionID(client->connectionID);
+	clientListRemoveByConnectionID(client->clientID);
 	
+	//PROBLEM: need to not free in read thread, maybe hold for write thread in free function?
 	//free client struct
-	//doing this frees the pointer to this thread, hopefully that is not bad
 	freeClient(client);
-	
 }
 
-*/
+void* clientWriteThreadRun(void *args)
+{
+	Client* client = (Client*)args;
+	unsigned char buffer[8000];
+	size_t bytesWritten;
+	
 
-bool clientListRemoveByConnectionID(int connectionID)
+	
+	printf("write thread\n");
+	//Remove client from client list
+	//clientListRemoveByConnectionID(client->connectionID);
+	//free client struct
+	//freeClient(client);
+}
+
+bool clientListRemoveByConnectionID(uuid_t clientID)
 {
 	bool output = FALSE;
 	
 	pthread_mutex_lock(&clientListLock);
-	int index =  clientListGetIndexByConnectionID(connectionID);
+	int index =  clientListGetIndexByConnectionID(clientID);
 	if(index != -1)
 	{
 		output = TRUE;
 		g_ptr_array_remove_index(clientList, index);
-		printf("Removing %d\n", connectionID);
+		char stringID[37];
+		uuid_unparse(clientID, stringID);
+		printf("Removing %s\n", stringID);
 	}
 	pthread_mutex_unlock(&clientListLock);
 	
 	return output;
 }
 
-Client* clientListGetByConnectionID(int connectionID)
+Client* clientListGetByConnectionID(uuid_t clientID)
 {
 	Client* output = NULL;
 	
 	pthread_mutex_lock(&clientListLock);
-	int index = clientListGetIndexByConnectionID(connectionID);
+	int index = clientListGetIndexByConnectionID(clientID);
 	if(index != -1)
 	{
 		output = g_ptr_array_index(clientList, index);
@@ -224,13 +192,13 @@ Client* clientListGetByConnectionID(int connectionID)
 }
 
 //Should only be used by other functions that have already grabbed lock
-int clientListGetIndexByConnectionID(int connectionID)
+int clientListGetIndexByConnectionID(uuid_t clientID)
 {
 	int output;
 	
 	//Have to create a blank struct to compare against
 	Client compareClient;
-	compareClient.connectionID = connectionID;
+	uuid_copy(compareClient.clientID, clientID);
 	
 	bool found = g_ptr_array_find_with_equal_func(clientList, &compareClient, clientListEqualFunction, &output);
 	
