@@ -8,7 +8,18 @@ void freeClient(Client* client)
 {
 	free(client->readThread);
 	free(client->writeThread);
+	//cleanup write buffer
 	free(client);
+	//Assume these threads have exited?
+	free(client->writeThread);
+	free(client->readThread);
+}
+
+void initClient(Client* client)
+{
+	uuid_generate_random(client->clientID);
+	pthread_mutex_init(&(client->writeBufferLock), NULL);
+	client->writeBuffer = g_ptr_array_new();
 }
 
 int clientListEqualFunction(const void * a, const void * b)
@@ -38,8 +49,16 @@ int clientListEqualFunction(const void * a, const void * b)
 	return output;
 }
 
-void initClient(Client* client)
+
+
+void addClientMessage(Client* client, TCPBinaryMessage* message)
 {
-	uuid_generate_random(client->clientID);
+	//grab lock
+	pthread_mutex_lock(&client->writeBufferLock);
+	g_ptr_array_add(client->writeBuffer, message);
+	//release lock
+	pthread_mutex_unlock(&client->writeBufferLock);
+
 }
+
 

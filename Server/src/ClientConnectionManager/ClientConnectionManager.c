@@ -32,11 +32,6 @@ void* clientConnectionManagerThreadRun(void *args)
 	
 	X509* certificate = X509_new();
 	
-	ASN1_TIME* before = malloc(sizeof(ASN1_TIME));
-	ASN1_TIME* after = malloc(sizeof(ASN1_TIME));
-	ASN1_TIME_set_string_X509(before, "2601010101011");
-	ASN1_TIME_set_string_X509(after, "9901010101011");
-	
     X509_gmtime_adj(X509_getm_notBefore(certificate), 0);
     X509_gmtime_adj(X509_getm_notAfter(certificate), 31536000L);
 	
@@ -51,16 +46,12 @@ void* clientConnectionManagerThreadRun(void *args)
 	X509_set_pubkey(certificate, privateKey);
 	X509_sign(certificate, privateKey, EVP_sha256());
 	
-
-	
 	SSL_CTX_set_security_level(sslCtx, 0);
 	SSL_CTX_set_session_cache_mode(sslCtx, SSL_SESS_CACHE_OFF);
 	SSL_CTX_use_certificate(sslCtx, certificate);
 	SSL_CTX_use_PrivateKey(sslCtx, privateKey);
 	
-	
 	SSL_CTX_set_verify(sslCtx, SSL_VERIFY_NONE, NULL);
-	
 
 	BIO* accepterBio = BIO_new_accept("8080");
 	BIO_do_accept(accepterBio);
@@ -100,7 +91,6 @@ void* clientConnectionManagerThreadRun(void *args)
 			SSL_free(ssl);
 			continue;
 		}
-		//Pass off to another thread
 		
 		//Create new client struct
 		Client* currentClient = malloc(sizeof(Client));
@@ -108,7 +98,7 @@ void* clientConnectionManagerThreadRun(void *args)
 		currentClient->ssl = ssl;
 		currentClient->readThread = malloc(sizeof(pthread_t));
 		currentClient->writeThread = malloc(sizeof(pthread_t));
-
+		//Pass off to another thread
 		pthread_create(currentClient->readThread, NULL, &clientReadThreadRun, (void*)currentClient);
 		pthread_create(currentClient->writeThread, NULL, &clientWriteThreadRun, (void*)currentClient);
 		//add to client array
@@ -124,7 +114,7 @@ void* clientConnectionManagerThreadRun(void *args)
 void* clientReadThreadRun(void *args)
 {
 	Client* client = (Client*)args;
-	unsigned char buffer[10];
+	unsigned char buffer[8000];
 	size_t bytesRead;
 	
 	while(SSL_read_ex(client->ssl, buffer, sizeof(buffer), &bytesRead) > 0)
@@ -145,11 +135,50 @@ void* clientReadThreadRun(void *args)
 void* clientWriteThreadRun(void *args)
 {
 	Client* client = (Client*)args;
-	unsigned char buffer[8000];
 	size_t bytesWritten;
+	int writeOutput = 1;
+	unsigned char* buffer = NULL;
 	
+	while(writeOutput > 1)
+	{
+		int bytesToWrite = 0;
+		//Fill buffer with messages from client write buffer
+		pthread_mutex_lock(&(client->writeBufferLock));
+		if(client->writeBuffer->len > 0)
+		{
+			for(int i = 0; i < client->writeBuffer->len; i++)
+			{
+				TCPBinaryMessage* currentMessage = g_ptr_array_index(client->writeBuffer, i);
+				bytesToWrite += sizeof(TCPBinaryMessage) - sizeof(currentMessage->data) + currentMessage->length;
+			}
+			
+			buffer = malloc(bytesToWrite);
+			//copy each message into the buffer
+			int currentByte = 0;
+			for(int i = 0; i < client->writeBuffer->len; i++)
+			{
+				TCPBinaryMessage* currentMessage = g_ptr_array_index(client->writeBuffer, i);
+				//copy type and length
+				memcpy(buffer + currentByte, currentMessage, sizeof(uint16_t)*2);
+				currentByte += sizeof(uint16_t)*2;
+				
+				//copy data
+				memcpy(buffer + currentByte, currentMessage->data, currentMessage->length);
+				currentByte += currentMessage->length;
+				free(currentMessage->data);
+				free(currentMessage);
+			}
+		}
+		
+		//clear client write buffer
+		g_ptr_array_set_size(client->writeBuffer, 0);
+		//release lock
+		pthread_mutex_unlock(&(client->writeBufferLock));
+		
+		writeOutput = SSL_write_ex(client->ssl, buffer, bytesToWrite, &bytesWritten);
+		free(buffer);
+	}
 
-	
 	printf("write thread\n");
 	//Remove client from client list
 	//clientListRemoveByConnectionID(client->connectionID);

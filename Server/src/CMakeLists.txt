@@ -21,3 +21,4 @@ target_link_libraries(C-Space-MMORPG-Server PRIVATE AuthenticationService)
 
 target_link_libraries(C-Space-MMORPG-Server PRIVATE -lmariadb)
 
+target_include_directories(C-Space-MMORPG-Server PRIVATE ${GLIB_INCLUDE_DIRS})
