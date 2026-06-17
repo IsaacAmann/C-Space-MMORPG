@@ -9,10 +9,12 @@ void freeClient(Client* client)
 	free(client->readThread);
 	free(client->writeThread);
 	//cleanup write buffer
-	free(client);
-	//Assume these threads have exited?
+	
+	
 	free(client->writeThread);
 	free(client->readThread);
+	free(client);
+
 }
 
 void initClient(Client* client)

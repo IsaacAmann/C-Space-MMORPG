@@ -117,18 +117,68 @@ void* clientReadThreadRun(void *args)
 	unsigned char buffer[8000];
 	size_t bytesRead;
 	
+	TCPBinaryMessage currentMessage;
+	char* messagePointer = (char*)&currentMessage;
+	int messageStarted = FALSE;
+	int bytesCopiedToMessage = 0;
+	
 	while(SSL_read_ex(client->ssl, buffer, sizeof(buffer), &bytesRead) > 0)
 	{
-		printf("read: %s, total bytes: %d\n", buffer, bytesRead);
+		//Start at the beginning of the buffer
+		int currentByte = 0;
+		while(currentByte < bytesRead)
+		{
+			//Case where message type has not been copied yet
+			if(bytesCopiedToMessage < 2)
+			{
+				messagePointer[bytesCopiedToMessage] = buffer[currentByte];
+				currentByte++;
+				bytesCopiedToMessage++;
+			}
+			//Data length not yet copied
+			else if(bytesCopiedToMessage < 4)
+			{
+				messagePointer[bytesCopiedToMessage] = buffer[currentByte];
+				currentByte++;
+				bytesCopiedToMessage++;
+				//If length fully read, allocate data memory
+				if(bytesCopiedToMessage == 4)
+				{
+					currentMessage.data = malloc(currentMessage.length);
+					printf("Allocated %d for message data\n", currentMessage.length);
+				}
+			}
+			//Copy message
+			else
+			{
+				//Get desired bytes to complete message (add 4 to account for the four bytes used for message type and length)
+				int desiredBytes = currentMessage.length - bytesCopiedToMessage + 4;
+				int actualBytesToCopy = desiredBytes - abs(desiredBytes - bytesRead);
+				//Copy bytes up to buffer contents
+				memcpy(currentMessage.data + (bytesCopiedToMessage - 4), buffer, actualBytesToCopy);
+				bytesCopiedToMessage += actualBytesToCopy;
+				currentByte += actualBytesToCopy;
+				//If message is complete, handle the message
+				if(bytesCopiedToMessage == 4 + currentMessage.length)
+				{
+					printf("Full message recieved\n");
+					printf("type: %d\n", currentMessage.type);
+					printf("length: %d\n", currentMessage.length);
+					//clear message
+					bytesCopiedToMessage = 0;
+					
+				}
+			}
+		}
+		
+		//printf("read: %s, total bytes: %d\n", buffer, bytesRead);
 	}
 	
 	printf("connection closed\n");
 	
 	//Remove client from client list
 	clientListRemoveByConnectionID(client->clientID);
-	
-	//PROBLEM: need to not free in read thread, maybe hold for write thread in free function?
-	//free client struct
+	pthread_join(*(client->writeThread), NULL);
 	freeClient(client);
 }
 
@@ -139,7 +189,7 @@ void* clientWriteThreadRun(void *args)
 	int writeOutput = 1;
 	unsigned char* buffer = NULL;
 	
-	while(writeOutput > 1)
+	while(writeOutput > 0)
 	{
 		int bytesToWrite = 0;
 		//Fill buffer with messages from client write buffer
