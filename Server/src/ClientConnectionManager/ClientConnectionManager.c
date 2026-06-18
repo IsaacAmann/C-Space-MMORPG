@@ -17,6 +17,7 @@ GPtrArray* clientList;
 
 void* clientConnectionManagerThreadRun(void *args)
 {
+	void* test = malloc(2);
 	pthread_mutex_init(&clientListLock, NULL);
 	clientList = g_ptr_array_new();
 	
@@ -50,15 +51,18 @@ void* clientConnectionManagerThreadRun(void *args)
 	SSL_CTX_set_session_cache_mode(sslCtx, SSL_SESS_CACHE_OFF);
 	SSL_CTX_use_certificate(sslCtx, certificate);
 	SSL_CTX_use_PrivateKey(sslCtx, privateKey);
+	const unsigned char* idCTX = (unsigned char*) "server";
+	printf("context: %d\n", SSL_CTX_set_session_id_context(sslCtx, idCTX, strlen(idCTX)));
 	
 	SSL_CTX_set_verify(sslCtx, SSL_VERIFY_NONE, NULL);
 
 	BIO* accepterBio = BIO_new_accept("8080");
 	BIO_do_accept(accepterBio);
+	//may need to switch to non-blocking, client renegotiating causes segfault when altering ssl struct 
+	//BIO_set_nbio(accepterBio, 1);
 	BIO_set_bind_mode(accepterBio, BIO_BIND_REUSEADDR);
 	
 	long opts;
-	
 	opts = SSL_OP_IGNORE_UNEXPECTED_EOF;
 	opts |= SSL_OP_NO_RENEGOTIATION;
 	opts |= SSL_OP_SERVER_PREFERENCE;
@@ -124,6 +128,7 @@ void* clientReadThreadRun(void *args)
 	
 	while(SSL_read_ex(client->ssl, buffer, sizeof(buffer), &bytesRead) > 0)
 	{
+		printf("read\n");
 		//Start at the beginning of the buffer
 		int currentByte = 0;
 		while(currentByte < bytesRead)
@@ -132,6 +137,7 @@ void* clientReadThreadRun(void *args)
 			if(bytesCopiedToMessage < 2)
 			{
 				messagePointer[bytesCopiedToMessage] = buffer[currentByte];
+				printf("type: %d\n", currentMessage.type);
 				currentByte++;
 				bytesCopiedToMessage++;
 			}
@@ -139,6 +145,8 @@ void* clientReadThreadRun(void *args)
 			else if(bytesCopiedToMessage < 4)
 			{
 				messagePointer[bytesCopiedToMessage] = buffer[currentByte];
+				printf("length: %d\n", currentMessage.length);
+
 				currentByte++;
 				bytesCopiedToMessage++;
 				//If length fully read, allocate data memory
@@ -153,11 +161,20 @@ void* clientReadThreadRun(void *args)
 			{
 				//Get desired bytes to complete message (add 4 to account for the four bytes used for message type and length)
 				int desiredBytes = currentMessage.length - bytesCopiedToMessage + 4;
-				int actualBytesToCopy = desiredBytes - abs(desiredBytes - bytesRead);
+				int actualBytesToCopy = desiredBytes;
+				int bytesLeft = bytesRead - currentByte;
+				//Check if desired bytes are available in the buffer
+				if(desiredBytes > bytesLeft)
+				{
+					actualBytesToCopy = bytesLeft;
+				}
+				printf("d: %d a: %d r: %d\n", desiredBytes, actualBytesToCopy, bytesRead);
+
 				//Copy bytes up to buffer contents
 				memcpy(currentMessage.data + (bytesCopiedToMessage - 4), buffer, actualBytesToCopy);
 				bytesCopiedToMessage += actualBytesToCopy;
 				currentByte += actualBytesToCopy;
+				printf("bytes copied: %d\n", bytesCopiedToMessage);
 				//If message is complete, handle the message
 				if(bytesCopiedToMessage == 4 + currentMessage.length)
 				{
@@ -166,7 +183,6 @@ void* clientReadThreadRun(void *args)
 					printf("length: %d\n", currentMessage.length);
 					//clear message
 					bytesCopiedToMessage = 0;
-					
 				}
 			}
 		}

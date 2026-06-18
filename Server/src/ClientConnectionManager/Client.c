@@ -6,11 +6,7 @@
 
 void freeClient(Client* client)
 {
-	free(client->readThread);
-	free(client->writeThread);
 	//cleanup write buffer
-	
-	
 	free(client->writeThread);
 	free(client->readThread);
 	free(client);
