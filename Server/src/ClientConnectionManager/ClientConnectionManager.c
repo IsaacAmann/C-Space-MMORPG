@@ -22,7 +22,6 @@ void* clientConnectionManagerThreadRun(void *args)
 	clientList = g_ptr_array_new();
 	
 	SSL_CTX* sslCtx = SSL_CTX_new(TLS_server_method());
-	
 	//Creating self signed certificate for testing, this should be replaced later with a proper certificate
 	//Create private key
 	EVP_PKEY* privateKey;
@@ -57,9 +56,9 @@ void* clientConnectionManagerThreadRun(void *args)
 	SSL_CTX_set_verify(sslCtx, SSL_VERIFY_NONE, NULL);
 
 	BIO* accepterBio = BIO_new_accept("8080");
+	BIO_set_nbio(accepterBio, 1);
 	BIO_do_accept(accepterBio);
 	//may need to switch to non-blocking, client renegotiating causes segfault when altering ssl struct 
-	//BIO_set_nbio(accepterBio, 1);
 	BIO_set_bind_mode(accepterBio, BIO_BIND_REUSEADDR);
 	
 	long opts;
@@ -88,9 +87,26 @@ void* clientConnectionManagerThreadRun(void *args)
 		SSL_set_bio(ssl, clientBio, clientBio);
 		
 		//ssl handshake
-		if(SSL_accept(ssl) <= 0)
+		/*
+		if(acceptRet <= 0)
 		{
 			printf("handshake\n");
+			printf("sslgeterror: %d\n", SSL_get_error(ssl, acceptRet));
+			ERR_print_errors_fp(stderr);
+			SSL_free(ssl);
+			continue;
+		}
+		*/
+		int acceptRet = SSL_accept(ssl);
+		while(acceptRet < 0 && acceptRet != 1)
+		{
+			printf("handshake\n");
+			printf("sslgeterror: %d\n", SSL_get_error(ssl, acceptRet));
+			
+			acceptRet = SSL_accept(ssl);
+		}
+		if(acceptRet <= 0)
+		{
 			ERR_print_errors_fp(stderr);
 			SSL_free(ssl);
 			continue;
@@ -126,6 +142,7 @@ void* clientReadThreadRun(void *args)
 	int messageStarted = FALSE;
 	int bytesCopiedToMessage = 0;
 	
+	//Need another way to know when connection closes, non-blocking exits
 	while(SSL_read_ex(client->ssl, buffer, sizeof(buffer), &bytesRead) > 0)
 	{
 		printf("read\n");
