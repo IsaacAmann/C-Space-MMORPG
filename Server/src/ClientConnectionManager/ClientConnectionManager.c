@@ -5,8 +5,7 @@
 #include "Client.h"
 #include "string.h"
 #include "TCPBinaryProtocol.h"
-#include <openssl/ssl.h>
-#include <openssl/err.h>
+
 #include <uuid/uuid.h>
 
 struct sockaddr_in clientConnectionAddress;
@@ -20,6 +19,7 @@ void* clientConnectionManagerThreadRun(void *args)
 	void* test = malloc(2);
 	pthread_mutex_init(&clientListLock, NULL);
 	clientList = g_ptr_array_new();
+	const char cache_id[] = "SpaceMMO Server";
 	
 	SSL_CTX* sslCtx = SSL_CTX_new(TLS_server_method());
 	//Creating self signed certificate for testing, this should be replaced later with a proper certificate
@@ -47,7 +47,11 @@ void* clientConnectionManagerThreadRun(void *args)
 	X509_sign(certificate, privateKey, EVP_sha256());
 	
 	SSL_CTX_set_security_level(sslCtx, 0);
-	SSL_CTX_set_session_cache_mode(sslCtx, SSL_SESS_CACHE_OFF);
+	
+	SSL_CTX_set_session_id_context(sslCtx, (void *)cache_id, sizeof(cache_id));
+	SSL_CTX_set_session_cache_mode(sslCtx, SSL_SESS_CACHE_SERVER);
+	SSL_CTX_sess_set_cache_size(sslCtx, 1024);
+	
 	SSL_CTX_use_certificate(sslCtx, certificate);
 	SSL_CTX_use_PrivateKey(sslCtx, privateKey);
 	const unsigned char* idCTX = (unsigned char*) "server";
@@ -97,15 +101,18 @@ void* clientConnectionManagerThreadRun(void *args)
 			continue;
 		}
 		*/
-		int acceptRet = SSL_accept(ssl);
-		while(acceptRet < 0 && acceptRet != 1)
+		
+		int acceptError = SSL_get_error(ssl,SSL_accept(ssl));
+		while(acceptError != SSL_ERROR_NONE && acceptError != SSL_ERROR_SYSCALL && acceptError != SSL_ERROR_SSL)
 		{
 			printf("handshake\n");
-			printf("sslgeterror: %d\n", SSL_get_error(ssl, acceptRet));
+			printf("sslgeterror: %d\n", SSL_get_error(ssl, acceptError));
 			
-			acceptRet = SSL_accept(ssl);
+			acceptError = SSL_get_error(ssl,SSL_accept(ssl));
 		}
-		if(acceptRet <= 0)
+		printf("last accept error %d\n", acceptError);
+		//handshake failed
+		if(acceptError != SSL_ERROR_NONE)
 		{
 			ERR_print_errors_fp(stderr);
 			SSL_free(ssl);
@@ -116,6 +123,7 @@ void* clientConnectionManagerThreadRun(void *args)
 		Client* currentClient = malloc(sizeof(Client));
 		initClient(currentClient);
 		currentClient->ssl = ssl;
+		currentClient->bio = clientBio;
 		currentClient->readThread = malloc(sizeof(pthread_t));
 		currentClient->writeThread = malloc(sizeof(pthread_t));
 		//Pass off to another thread
@@ -131,6 +139,7 @@ void* clientConnectionManagerThreadRun(void *args)
 	printf("Client connection listener is exitting,,,\n");
 }
 
+//Need to handle want read / want write error
 void* clientReadThreadRun(void *args)
 {
 	Client* client = (Client*)args;
@@ -141,72 +150,101 @@ void* clientReadThreadRun(void *args)
 	char* messagePointer = (char*)&currentMessage;
 	int messageStarted = FALSE;
 	int bytesCopiedToMessage = 0;
+
+	ERR_clear_error();
+	BIO_POLL_DESCRIPTOR pollDescriptor;
 	
-	//Need another way to know when connection closes, non-blocking exits
-	while(SSL_read_ex(client->ssl, buffer, sizeof(buffer), &bytesRead) > 0)
+	BIO_get_rpoll_descriptor(client->bio, &pollDescriptor);
+	
+	
+	struct ssl_poll_item_st pollItem = {
+			pollDescriptor,
+			1,
+			0
+	};
+	
+	struct timeval pollTimeout = {0, 1000};
+	
+	//Poll SSL events
+	SSL_poll(&pollItem, 1, sizeof(struct ssl_poll_item_st), &pollTimeout, 0, NULL);
+	printf("poll: %d\n", pollItem.revents);
+	
+	//while(readError != SSL_ERROR_SYSCALL && readError != SSL_ERROR_SSL && readError != SSL_ERROR_ZERO_RETURN)
+	while(!isPollError(&pollItem))
 	{
-		printf("read\n");
-		//Start at the beginning of the buffer
-		int currentByte = 0;
-		while(currentByte < bytesRead)
+		//Attempt read
+		if(true)
 		{
-			//Case where message type has not been copied yet
-			if(bytesCopiedToMessage < 2)
+			int readError = SSL_get_error(client->ssl, SSL_read_ex(client->ssl, buffer, sizeof(buffer), &bytesRead));
+			printf("read %d\n", readError);
+			//Start at the beginning of the buffer
+			int currentByte = 0;
+			while(currentByte < bytesRead)
 			{
-				messagePointer[bytesCopiedToMessage] = buffer[currentByte];
-				printf("type: %d\n", currentMessage.type);
-				currentByte++;
-				bytesCopiedToMessage++;
-			}
-			//Data length not yet copied
-			else if(bytesCopiedToMessage < 4)
-			{
-				messagePointer[bytesCopiedToMessage] = buffer[currentByte];
-				printf("length: %d\n", currentMessage.length);
-
-				currentByte++;
-				bytesCopiedToMessage++;
-				//If length fully read, allocate data memory
-				if(bytesCopiedToMessage == 4)
+				//Case where message type has not been copied yet
+				if(bytesCopiedToMessage < 2)
 				{
-					currentMessage.data = malloc(currentMessage.length);
-					printf("Allocated %d for message data\n", currentMessage.length);
-				}
-			}
-			//Copy message
-			else
-			{
-				//Get desired bytes to complete message (add 4 to account for the four bytes used for message type and length)
-				int desiredBytes = currentMessage.length - bytesCopiedToMessage + 4;
-				int actualBytesToCopy = desiredBytes;
-				int bytesLeft = bytesRead - currentByte;
-				//Check if desired bytes are available in the buffer
-				if(desiredBytes > bytesLeft)
-				{
-					actualBytesToCopy = bytesLeft;
-				}
-				printf("d: %d a: %d r: %d\n", desiredBytes, actualBytesToCopy, bytesRead);
-
-				//Copy bytes up to buffer contents
-				memcpy(currentMessage.data + (bytesCopiedToMessage - 4), buffer, actualBytesToCopy);
-				bytesCopiedToMessage += actualBytesToCopy;
-				currentByte += actualBytesToCopy;
-				printf("bytes copied: %d\n", bytesCopiedToMessage);
-				//If message is complete, handle the message
-				if(bytesCopiedToMessage == 4 + currentMessage.length)
-				{
-					printf("Full message recieved\n");
+					messagePointer[bytesCopiedToMessage] = buffer[currentByte];
 					printf("type: %d\n", currentMessage.type);
+					currentByte++;
+					bytesCopiedToMessage++;
+				}
+				//Data length not yet copied
+				else if(bytesCopiedToMessage < 4)
+				{
+					messagePointer[bytesCopiedToMessage] = buffer[currentByte];
 					printf("length: %d\n", currentMessage.length);
-					//clear message
-					bytesCopiedToMessage = 0;
+
+					currentByte++;
+					bytesCopiedToMessage++;
+					//If length fully read, allocate data memory
+					if(bytesCopiedToMessage == 4)
+					{
+						currentMessage.data = malloc(currentMessage.length);
+						printf("Allocated %d for message data\n", currentMessage.length);
+					}
+				}
+				//Copy message
+				else
+				{
+					//Get desired bytes to complete message (add 4 to account for the four bytes used for message type and length)
+					int desiredBytes = currentMessage.length - bytesCopiedToMessage + 4;
+					int actualBytesToCopy = desiredBytes;
+					int bytesLeft = bytesRead - currentByte;
+					//Check if desired bytes are available in the buffer
+					if(desiredBytes > bytesLeft)
+					{
+						actualBytesToCopy = bytesLeft;
+					}
+					printf("d: %d a: %d r: %d\n", desiredBytes, actualBytesToCopy, bytesRead);
+
+					//Copy bytes up to buffer contents
+					memcpy(currentMessage.data + (bytesCopiedToMessage - 4), buffer, actualBytesToCopy);
+					bytesCopiedToMessage += actualBytesToCopy;
+					currentByte += actualBytesToCopy;
+					printf("bytes copied: %d\n", bytesCopiedToMessage);
+					//If message is complete, handle the message
+					if(bytesCopiedToMessage == 4 + currentMessage.length)
+					{
+						printf("Full message recieved\n");
+						printf("type: %d\n", currentMessage.type);
+						printf("length: %d\n", currentMessage.length);
+						//clear message
+						bytesCopiedToMessage = 0;
+					}
 				}
 			}
 		}
-		
+		ERR_clear_error();
+		//readError = SSL_get_error(client->ssl, SSL_read_ex(client->ssl, buffer, sizeof(buffer), &bytesRead));
 		//printf("read: %s, total bytes: %d\n", buffer, bytesRead);
+		SSL_poll(&pollItem, 1, sizeof(struct ssl_poll_item_st), &pollTimeout, 0, NULL);
+
 	}
-	
+	//printf("readError: %d\n", readError);
+	char errorBuffer[256];
+	ERR_error_string_n((int)ERR_get_error, errorBuffer, 256);
+	printf(errorBuffer);
 	printf("connection closed\n");
 	
 	//Remove client from client list
@@ -222,6 +260,7 @@ void* clientWriteThreadRun(void *args)
 	int writeOutput = 1;
 	unsigned char* buffer = NULL;
 	
+	/*
 	while(writeOutput > 0)
 	{
 		int bytesToWrite = 0;
@@ -261,7 +300,7 @@ void* clientWriteThreadRun(void *args)
 		writeOutput = SSL_write_ex(client->ssl, buffer, bytesToWrite, &bytesWritten);
 		free(buffer);
 	}
-
+	*/
 	printf("write thread\n");
 	//Remove client from client list
 	//clientListRemoveByConnectionID(client->connectionID);
@@ -316,6 +355,15 @@ int clientListGetIndexByConnectionID(uuid_t clientID)
 	
 	if(found == FALSE)
 		output = -1;
+	
+	return output;
+}
+
+int isPollError(struct ssl_poll_item_st *item)
+{
+	int output = item->revents;
+	
+	output = output & SSL_POLL_EVENT_F & SSL_POLL_EVENT_EC & SSL_POLL_EVENT_ECD & SSL_POLL_EVENT_ER & SSL_POLL_EVENT_EW;
 	
 	return output;
 }
