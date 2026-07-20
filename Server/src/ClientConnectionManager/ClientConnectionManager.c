@@ -152,31 +152,46 @@ void* clientReadThreadRun(void *args)
 	int bytesCopiedToMessage = 0;
 
 	ERR_clear_error();
-	BIO_POLL_DESCRIPTOR pollDescriptor;
+	//BIO_POLL_DESCRIPTOR pollDescriptor;
 	
-	BIO_get_rpoll_descriptor(client->bio, &pollDescriptor);
+	//BIO_get_rpoll_descriptor(client->bio, &pollDescriptor);
 	
-	
+	/*
 	struct ssl_poll_item_st pollItem = {
 			pollDescriptor,
-			1,
+			SSL_POLL_EVENT_R | SSL_POLL_EVENT_W,
 			0
 	};
+	*/
 	
 	struct timeval pollTimeout = {0, 1000};
 	
 	//Poll SSL events
-	SSL_poll(&pollItem, 1, sizeof(struct ssl_poll_item_st), &pollTimeout, 0, NULL);
-	printf("poll: %d\n", pollItem.revents);
-	
+	//SSL_poll(&pollItem, 1, sizeof(struct ssl_poll_item_st), &pollTimeout, 0, NULL);
+	//printf("poll: %d\n", pollItem.revents);
+	int connectionLive = 1;
+	//int readError = SSL_get_error(client->ssl, SSL_read_ex(client->ssl, buffer, sizeof(buffer), &bytesRead));
+	//while(!isPollError(&pollItem))
 	//while(readError != SSL_ERROR_SYSCALL && readError != SSL_ERROR_SSL && readError != SSL_ERROR_ZERO_RETURN)
-	while(!isPollError(&pollItem))
+	while(connectionLive)
 	{
+		//printf("events%d\n", pollItem.revents);
 		//Attempt read
-		if(true)
+		bytesRead = 0;
+		int readError = SSL_get_error(client->ssl, SSL_read_ex(client->ssl, buffer, sizeof(buffer), &bytesRead));
+		
+		//If received fatal error, exit loop
+		if(readError == SSL_ERROR_SYSCALL || readError == SSL_ERROR_SSL || readError == SSL_ERROR_ZERO_RETURN)
 		{
-			int readError = SSL_get_error(client->ssl, SSL_read_ex(client->ssl, buffer, sizeof(buffer), &bytesRead));
-			printf("read %d\n", readError);
+			printf("Fatal error\n");
+			connectionLive = 0;
+			break;
+		}
+		//if((pollItem.revents & SSL_POLL_EVENT_R) == SSL_POLL_EVENT_R)
+		if(bytesRead > 0)
+		{
+			
+			printf("bytes %d\n", bytesRead);
 			//Start at the beginning of the buffer
 			int currentByte = 0;
 			while(currentByte < bytesRead)
@@ -235,10 +250,11 @@ void* clientReadThreadRun(void *args)
 				}
 			}
 		}
+
 		ERR_clear_error();
 		//readError = SSL_get_error(client->ssl, SSL_read_ex(client->ssl, buffer, sizeof(buffer), &bytesRead));
 		//printf("read: %s, total bytes: %d\n", buffer, bytesRead);
-		SSL_poll(&pollItem, 1, sizeof(struct ssl_poll_item_st), &pollTimeout, 0, NULL);
+		//SSL_poll(&pollItem, 1, sizeof(struct ssl_poll_item_st), &pollTimeout, 0, NULL);
 
 	}
 	//printf("readError: %d\n", readError);
